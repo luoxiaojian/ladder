@@ -1,3 +1,7 @@
-//
-// Created by luo on 2025/1/27.
-//
+#include "graph/schema.h"
+
+namespace ladder {
+
+void Schema::open(const std::string& json_file) {}
+
+}  // namespace ladder

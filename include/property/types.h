@@ -1,8 +1,23 @@
-//
-// Created by luo on 2025/1/27.
-//
+#ifndef LADDER_PROPERTY_TYPES_H
+#define LADDER_PROPERTY_TYPES_H
 
-#ifndef LADDER_TYPES_H
-#define LADDER_TYPES_H
+namespace ladder {
 
-#endif  // LADDER_TYPES_H
+enum class DataType {
+  kInt32,
+  kUInt32,
+  kInt64,
+  kUInt64,
+  kFloat,
+  kDouble,
+  kDate,
+  kDateTime,
+  kString,
+  kLCString,
+  kID,
+  kNull,
+};
+
+}  // namespace ladder
+
+#endif  // LADDER_PROPERTY_TYPES_H
