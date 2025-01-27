@@ -9,12 +9,18 @@ namespace ladder {
 
 class ICsr {
  public:
-  virtual size_t vertex_num() = 0;
-  virtual size_t edge_num() = 0;
-  virtual int degree(vertex_t u) = 0;
+  virtual ~ICsr() = default;
 
-  virtual AdjList get_edges(vertex_t u) = 0;
-  virtual AdjOffsetList get_edges_with_offset(vertex_t u) = 0;
+  virtual void open(const std::string& prefix) = 0;
+
+  virtual size_t vertex_num() const = 0;
+  virtual size_t edge_num() const = 0;
+  virtual int degree(vertex_t u) const = 0;
+
+  virtual AdjList get_edges(vertex_t u) const = 0;
+  virtual AdjList get_partial_edges(vertex_t u, int part_i,
+                                    int part_num) const = 0;
+  virtual AdjOffsetList get_edges_with_offset(vertex_t u) const = 0;
 };
 
 }  // namespace ladder

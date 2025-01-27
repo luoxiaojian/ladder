@@ -51,13 +51,39 @@ class Schema {
 
   void open(const std::string& json_file);
 
+  label_t vertex_label_num() const { return vertex_type_to_id_.size(); }
+  label_t edge_label_num() const { return edge_type_to_id_.size(); }
+
+  const std::vector<std::pair<std::string, DataType>>& get_vertex_header(
+      label_t label) const {
+    return vertex_prop_vec_.at(label);
+  }
+
+  bool oe_is_single(label_t src, label_t edge, label_t dst) const {
+    return oe_single_.find(LabelTriplet(src, edge, dst)) != oe_single_.end();
+  }
+
+  bool ie_is_single(label_t src, label_t edge, label_t dst) const {
+    return ie_single_.find(LabelTriplet(src, edge, dst)) != ie_single_.end();
+  }
+
+  bool exist_edge_triplet(label_t src, label_t edge, label_t dst) const {
+    return edge_prop_meta_.find(LabelTriplet(src, edge, dst)) !=
+           edge_prop_meta_.end();
+  }
+
+  const std::vector<std::pair<std::string, DataType>>& get_edge_header(
+      label_t src, label_t edge, label_t dst) const {
+    return edge_prop_vec_.at(LabelTriplet(src, edge, dst));
+  }
+
  private:
   std::unordered_map<std::string, label_t> vertex_type_to_id_;
   std::unordered_map<std::string, label_t> edge_type_to_id_;
 
   std::vector<std::unordered_map<std::string, std::pair<DataType, size_t>>>
       vertex_prop_meta_;
-  std::vector<std::vector<std::string, DataType>> vertex_prop_vec_;
+  std::vector<std::vector<std::pair<std::string, DataType>>> vertex_prop_vec_;
   std::vector<PartitionType> vertex_partition_type_;
 
   std::map<LabelTriplet,

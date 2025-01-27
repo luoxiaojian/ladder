@@ -15,7 +15,7 @@ class Csr : public ICsr {
   Csr() = default;
   ~Csr() = default;
 
-  void open(const std::string& prefix) {
+  void open(const std::string& prefix) override {
     std::string nbr_list_fname = prefix + "_nbrs";
     load_from_file(nbr_list_fname, neighbors_);
 
@@ -31,19 +31,38 @@ class Csr : public ICsr {
     edge_num_ = meta[0];
   }
 
-  inline size_t vertex_num() override { return offsets_.size(); }
+  inline size_t vertex_num() const override { return offsets_.size(); }
 
-  inline size_t edge_num() override { return edge_num_; }
+  inline size_t edge_num() const override { return edge_num_; }
 
-  inline int degree(vertex_t u) override { return degree_[u]; }
-
-  inline AdjList get_edges(vertex_t u) override {
-    return AdjList(&neighbors_[offsets_[u]], degree(u));
+  inline int degree(vertex_t u) const override {
+    if (u >= degree_.size()) {
+      return 0;
+    } else {
+      return degree_[u];
+    }
   }
 
-  inline AdjOffsetList get_edges_with_offset(vertex_t u) override {
-    size_t start_offset = offsets_[u];
-    return AdjOffsetList(&neighbors_[start_offset], degree(u), start_offset);
+  inline AdjList get_edges(vertex_t u) const override {
+    int deg = degree(u);
+    return deg == 0 ? AdjList::empty() : AdjList(&neighbors_[offsets_[u]], deg);
+  }
+
+  inline AdjList get_partial_edges(vertex_t u, int part_i,
+                                   int part_num) const override {
+    int deg = degree(u);
+    int part_size = (deg + part_num - 1) / part_num;
+    int start = std::min(part_i * part_size, deg);
+    int end = std::min(start + part_size, deg);
+    return start == end
+               ? AdjList::empty()
+               : AdjList(&neighbors_[offsets_[u] + start], end - start);
+  }
+
+  inline AdjOffsetList get_edges_with_offset(vertex_t u) const override {
+    int deg = degree(u);
+    return deg == 0 ? AdjOffsetList::empty()
+                    : AdjOffsetList(&neighbors_[offsets_[u]], deg, offsets_[u]);
   }
 
  private:

@@ -17,8 +17,8 @@ size_t hash_vertex(gid_t x) {
 }
 
 class Indexer {
-  static const size_t INITIAL_SIZE = 16;
-  static const double MAX_LOAD_FACTOR = 0.875;
+  static constexpr size_t INITIAL_SIZE = 16;
+  static constexpr double MAX_LOAD_FACTOR = 0.875;
   static size_t calc_table_size(size_t keys_size) {
     size_t size = INITIAL_SIZE;
     while (true) {

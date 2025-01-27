@@ -34,6 +34,8 @@ class AdjList {
       return ptr_ != rhs.ptr_;
     }
 
+    inline const gid_t& operator*() const { return *ptr_; }
+
    private:
     const gid_t* ptr_;
   };
@@ -43,6 +45,8 @@ class AdjList {
 
   iterator begin() const { return iterator(start_); }
   iterator end() const { return iterator(end_); }
+
+  static AdjList empty() { return AdjList(nullptr, 0); }
 
  private:
   const gid_t* start_;
@@ -87,6 +91,8 @@ class AdjOffsetList {
 
   iterator begin() const { return iterator(start_, offset_start_); }
   iterator end() const { return iterator(end_, offset_end_); }
+
+  static AdjOffsetList empty() { return AdjOffsetList(nullptr, 0, 0); }
 
  private:
   const gid_t* start_;

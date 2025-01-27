@@ -1,5 +1,5 @@
-#ifndef LADDER_OPERATOR_H_
-#define LADDER_OPERATOR_H_
+#ifndef LADDER_LADDER_OPERATOR_H_
+#define LADDER_LADDER_OPERATOR_H_
 
 #include "in_stream.h"
 #include "out_stream.h"
@@ -16,4 +16,4 @@ class IOperator {
 
 }  // namespace ladder
 
-#endif  // LADDER_OPERATOR_H_
+#endif  // LADDER_LADDER_OPERATOR_H_

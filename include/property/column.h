@@ -5,6 +5,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "property/date.h"
+#include "property/datetime.h"
 #include "property/types.h"
 #include "utils.h"
 

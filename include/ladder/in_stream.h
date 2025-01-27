@@ -1,5 +1,5 @@
-#ifndef LADDER_IN_STREAM_H_
-#define LADDER_IN_STREAM_H_
+#ifndef LADDER_LADDER_IN_STREAM_H_
+#define LADDER_LADDER_IN_STREAM_H_
 
 #include <vector>
 
@@ -27,4 +27,4 @@ InStream& operator<<(InStream& in, int data) {
 
 }  // namespace ladder
 
-#endif  // LADDER_IN_STREAM_H_
+#endif  // LADDER_LADDER_IN_STREAM_H_

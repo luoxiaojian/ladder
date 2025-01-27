@@ -1,12 +1,14 @@
 cmake_minimum_required(VERSION 3.0)
 project(Ladder)
 
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/third_party/nlohmann_json/cmake")
+set(CMAKE_CXX_STANDARD 17)
 
-find_package(nlohmann_json REQUIRED)
+if (NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel." FORCE)
+endif ()
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
-include_directories(${NLOHMANN_JSON_INCLUDE_DIRS})
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/third_party)
 
 add_executable(query_executor bin/query_executor.cc)
 
@@ -21,4 +23,11 @@ foreach (SOURCE IN LISTS LIB_SOURCES)
     add_library(${LIB_NAME} SHARED ${SOURCE})
     target_link_libraries(${LIB_NAME} ladder)
     set_target_properties(${LIB_NAME} PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${LIBRARY_OUTPUT_PATH})
+endforeach ()
+
+file(GLOB TEST_SOURCES "tests/*.cc")
+foreach (SOURCE IN LISTS TEST_SOURCES)
+    get_filename_component(TEST_NAME ${SOURCE} NAME_WE)
+    add_executable(${TEST_NAME} ${SOURCE})
+    target_link_libraries(${TEST_NAME} ladder)
 endforeach ()
