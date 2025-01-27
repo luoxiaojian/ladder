@@ -16,6 +16,9 @@ class InStream {
     buffer_.insert(buffer_.end(), data, data + size);
   }
 
+  std::vector<char>& buffer() { return buffer_; }
+  const std::vector<char>& buffer() const { return buffer_; }
+
  private:
   std::vector<char> buffer_;
 };

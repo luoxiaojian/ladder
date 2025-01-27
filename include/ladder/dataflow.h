@@ -2,6 +2,8 @@
 #define LADDER_LADDER_DATAFLOW_H_
 
 #include <memory>
+#include <queue>
+#include <thread>
 #include <vector>
 
 #include "context.h"
@@ -9,67 +11,292 @@
 
 namespace ladder {
 
-class Scope {
- public:
-  Scope() = default;
-  ~Scope() = default;
-
-  void start() {
-    stat_.clear();
-    stat_.emplace_back(0, 0);
-  }
-
-  void next() { stat_.rbegin()->second++; }
-
-  void enter() { stat_.emplace_back(0, 0); }
-
-  void leave() { stat_.resize(stat_.size() - 1); }
-
-  void feedback() {
-    auto& last = &stat_.rbegin();
-    last->first += 1;
-    last->second = 0;
-  }
-
-  int get_depth() const { return stat_.size(); }
-
-  int get_iteration(int lvl) const { return stat_[lvl].first; }
-
-  int get_index(int lvl) const { return stat_[lvl].second; }
-
- private:
-  std::vector<std::pair<int, int>> stat_;
-};
+class DataFlowRunner;
 
 class DataFlow {
  public:
-  DataFlow() : lvl_(0) {}
+  DataFlow() : lvl_(0), sink_op_(-1) {}
   ~DataFlow() = default;
 
-  void add_operator(std::unique_ptr<IOperator>&& op) {
-    operators_.push_back(std::move(op));
+  int add_nullary_operator(std::unique_ptr<INullaryOperator>&& op) {
+    operators_.emplace_back(std::move(op));
+    std::vector<int> cur;
+    upstreams_.emplace_back(std::move(cur));
+
+    return operators_.size() - 1;
   }
 
-  bool step(Scope& cur, bool msg) {
-    assert(cur.get_depth() == 1);
-    cur.next();
-    return true;
+  int add_unary_operator(std::unique_ptr<IUnaryOperator>&& op, int upstream) {
+    operators_.emplace_back(std::move(op));
+    std::vector<int> cur;
+    cur.push_back(upstream);
+    upstreams_.emplace_back(std::move(cur));
+
+    return operators_.size() - 1;
   }
 
-  IOperator& get_operator(const Scope& scope) {
-    assert(cur.get_depth() == 1);
-    int idx = scope.get_index(lvl_);
-    return *operators_[idx];
+  int add_binary_operator(std::unique_ptr<IBinaryOperator>&& op, int upstream0,
+                          int upstream1) {
+    operators_.emplace_back(std::move(op));
+    std::vector<int> cur;
+    cur.push_back(upstream0);
+    cur.push_back(upstream1);
+    upstreams_.emplace_back(std::move(cur));
+
+    return operators_.size() - 1;
   }
-  const IOperator& get_operator(const Scope& scope) const {
-    assert(cur.get_depth() == 1);
-    int idx = scope.get_index(lvl_);
-    return *operators_[idx];
+
+  void sink(int op_id) { sink_op_ = op_id; }
+
+ private:
+  void generate_order() {
+    std::vector<std::set<int>> deps;
+    int op_num = upstreams_.size();
+    deps.resize(op_num);
+    std::set<int> not_scheduled;
+
+    std::deque<int> que;
+    que.push_back(sink_op_);
+    not_scheduled.insert(sink_op_);
+    while (!que.empty()) {
+      auto cur = que.front();
+      que.pop_front();
+
+      for (auto v : upstreams_[cur]) {
+        if (not_scheduled.find(v) == not_scheduled.end()) {
+          not_scheduled.insert(v);
+          que.push_back(v);
+        }
+      }
+    }
+
+    for (auto v : not_scheduled) {
+      for (auto u : upstreams_[v]) {
+        deps[v].insert(u);
+      }
+    }
+
+    std::vector<std::vector<int>> batches;
+
+    while (true) {
+      std::set<int> cur_batch;
+      for (auto v : not_scheduled) {
+        if (deps[v].empty()) {
+          cur_batch.insert(v);
+        }
+      }
+      if (cur_batch.empty()) {
+        break;
+      }
+      std::vector<int> batch_vec;
+      for (auto v : cur_batch) {
+        not_scheduled.erase(v);
+        batch_vec.push_back(v);
+      }
+      batches.emplace_back(std::move(batch_vec));
+      if (not_scheduled.empty()) {
+        break;
+      }
+      for (auto v : not_scheduled) {
+        auto& dep = deps[v];
+        for (auto c : cur_batch) {
+          dep.erase(c);
+        }
+      }
+    }
+
+    output_refcount_.clear();
+    output_refcount_.resize(op_num, 0);
+    order_.clear();
+    for (auto& batch : batches) {
+      for (auto v : batch) {
+        order_.push_back(v);
+        for (auto u : upstreams_[v]) {
+          output_refcount_[u] += 1;
+        }
+      }
+    }
+  }
+
+  friend class DataFlowRunner;
+
+  std::vector<std::unique_ptr<IOperator>> operators_;
+  std::vector<std::vector<int>> upstreams_;
+  std::vector<int> order_;
+  std::vector<int> output_refcount_;
+  int sink_op_;
+  int lvl_;
+};
+
+class MessageSlot {
+ public:
+  MessageSlot() : ref_count_(0) {}
+  void init(int worker_num, int ref_count) {
+    buffers_.resize(worker_num);
+    ref_count_ = ref_count;
+  }
+
+  const std::vector<std::vector<char>>& get(int worker_id) const {
+    return buffers_[worker_id];
+  }
+
+  void deref() {
+    --ref_count_;
+    if (ref_count_ == 0) {
+      buffers_.clear();
+    }
+  }
+
+  void ingest(std::vector<std::pair<int, std::vector<char>>>&& messages) {
+    for (auto& pair : messages) {
+      buffers_[pair.first].emplace_back(std::move(pair.second));
+    }
   }
 
  private:
-  std::vector<std::unique_ptr<IOperator>> operators_;
-  int lvl_;
+  std::vector<std::vector<std::vector<char>>> buffers_;
+  int ref_count_;
+};
+
+class MessageOut {
+ public:
+  MessageOut(int global_worker_num) { messages_.resize(global_worker_num); }
+
+  void put(int dst, std::vector<char>&& batch) {
+    messages_[dst].emplace_back(std::move(batch));
+  }
+
+ private:
+  std::vector<std::vector<std::vector<char>>> messages_;
+};
+
+class DataFlowRunner {
+ public:
+  DataFlowRunner(const DataFlow& dataflow, std::vector<IContext*>& contexts,
+                 int local_worker_num, int global_worker_num)
+      : dataflow_(dataflow),
+        contexts_(contexts),
+        local_worker_num_(local_worker_num),
+        global_worker_num_(global_worker_num),
+        cur_step_(0) {}
+
+  MessageOut StepStart() {
+    MessageOut ret(global_worker_num_);
+    if (cur_step_ == dataflow_.order_.size()) {
+      return ret;
+    }
+    int cur_op = dataflow_.order_[cur_step_];
+    std::vector<std::queue<std::pair<int, std::vector<char>>>> message_queues;
+
+    OperatorType op_type = dataflow_.operators_[cur_op]->type();
+    if (op_type == OperatorType::kNullary) {
+      std::vector<std::thread> threads;
+      for (int i = 0; i < local_worker_num_; ++i) {
+        threads.emplace_back(
+            [&, this](int tid) {
+              std::vector<InStream> output(global_worker_num_);
+              dynamic_cast<INullaryOperator*>(
+                  dataflow_.operators_[cur_op].get())
+                  ->Execute(*contexts_[tid], output);
+              for (int i = 0; i < global_worker_num_; ++i) {
+                if (output[i].size() != 0) {
+                  message_queues[tid].emplace(i, std::move(output[i].buffer()));
+                }
+              }
+            },
+            i);
+      }
+      for (auto& thrd : threads) {
+        thrd.join();
+      }
+    } else if (op_type == OperatorType::kUnary) {
+      int upstream = dataflow_.upstreams_[cur_op].at(0);
+      std::vector<OutStream> inputs;
+      for (int i = 0; i < local_worker_num_; ++i) {
+        inputs.emplace_back(slots_[upstream].get(i));
+      }
+
+      std::vector<std::thread> threads;
+      for (int i = 0; i < local_worker_num_; ++i) {
+        threads.emplace_back(
+            [&, this](int tid) {
+              std::vector<InStream> output(global_worker_num_);
+              dynamic_cast<IUnaryOperator*>(dataflow_.operators_[cur_op].get())
+                  ->Execute(*contexts_[tid], inputs[tid], output);
+              for (int i = 0; i < global_worker_num_; ++i) {
+                if (output[i].size() != 0) {
+                  message_queues[tid].emplace(i, std::move(output[i].buffer()));
+                }
+              }
+            },
+            i);
+      }
+      for (auto& thrd : threads) {
+        thrd.join();
+      }
+
+      slots_[upstream].deref();
+    } else {
+      assert(op_type == OperatorType::kBinary);
+      int upstream0 = dataflow_.upstreams_[cur_op].at(0);
+      int upstream1 = dataflow_.upstreams_[cur_op].at(1);
+      std::vector<OutStream> inputs0, inputs1;
+      for (int i = 0; i < local_worker_num_; ++i) {
+        inputs0.emplace_back(slots_[upstream0].get(i));
+        inputs1.emplace_back(slots_[upstream1].get(i));
+      }
+
+      std::vector<std::thread> threads;
+      for (int i = 0; i < local_worker_num_; ++i) {
+        threads.emplace_back(
+            [&](int tid) {
+              std::vector<InStream> output(global_worker_num_);
+              dynamic_cast<IBinaryOperator*>(dataflow_.operators_[cur_op].get())
+                  ->Execute(*contexts_[tid], inputs0[tid], inputs1[tid],
+                            output);
+              for (int i = 0; i < global_worker_num_; ++i) {
+                if (output[i].size() != 0) {
+                  message_queues[tid].emplace(i, std::move(output[i].buffer()));
+                }
+              }
+            },
+            i);
+      }
+
+      for (auto& thrd : threads) {
+        thrd.join();
+      }
+
+      slots_[upstream0].deref();
+      slots_[upstream1].deref();
+    }
+
+    for (auto& que : message_queues) {
+      while (!que.empty()) {
+        auto& top = que.front();
+        ret.put(top.first, std::move(top.second));
+        que.pop();
+      }
+    }
+
+    return ret;
+  }
+
+  void StepFinish(std::vector<std::pair<int, std::vector<char>>>&& messages) {
+    int cur_op = dataflow_.order_[cur_step_++];
+    slots_[cur_op].init(local_worker_num_, dataflow_.output_refcount_[cur_op]);
+    slots_[cur_op].ingest(std::move(messages));
+  }
+
+  bool Terminated() const { return cur_step_ == dataflow_.order_.size(); }
+
+ private:
+  const DataFlow& dataflow_;
+  std::vector<IContext*>& contexts_;
+  std::vector<MessageSlot> slots_;
+  int local_worker_num_;
+  int global_worker_num_;
+  size_t cur_step_;
 };
 
 }  // namespace ladder

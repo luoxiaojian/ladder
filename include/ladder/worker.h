@@ -24,7 +24,7 @@ class Worker {
 
   void Eval(const GraphDB& graph, const App& app,
             const std::map<std::string, std::string>& params) {
-    DataFlow* dataflows = app.create_dataflow();
+    DataFlow* dataflow = app.create_dataflow();
     std::vector<IContext*> contexts;
     for (int i = 0; i < worker_num_; ++i) {
       IContext* ctx = app.create_context(&graph);
@@ -40,11 +40,12 @@ class Worker {
     }
 
     Communicator comm;
-    Scope scope;
-    scope.start();
+    DataFlowRunner runner(*dataflow);
 
-    while (true) {
-      Step(dataflows, scope);
+    while (!runner.Terminated()) {
+      auto messages_out = runner.StepStart();
+      auto messages_in = comm.shuffle(std::move(message_out));
+      runner.StepFinish(std::move(messages_in));
     }
   }
 

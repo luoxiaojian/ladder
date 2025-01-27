@@ -9,8 +9,8 @@ namespace ladder {
 
 class OutStream {
  public:
-  OutStream(std::vector<std::vector<char>>&& buffers)
-      : buffers_(std::move(buffers)), idx_(0), offset_(0) {}
+  OutStream(const std::vector<std::vector<char>>& buffers)
+      : buffers_(buffers), idx_(0), offset_(0) {}
   ~OutStream() = default;
 
   bool empty() const { return buffers_.empty(); }
@@ -28,7 +28,7 @@ class OutStream {
   }
 
  private:
-  std::vector<std::vector<char>> buffers_;
+  const std::vector<std::vector<char>>& buffers_;
   size_t idx_;
   size_t offset_;
 };
