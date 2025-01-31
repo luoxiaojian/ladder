@@ -1,4 +1,7 @@
+#include <assert.h>
+
 #include <queue>
+#include <string_view>
 
 #include "graph/graph_db.h"
 #include "graph/graph_view.h"
@@ -65,10 +68,9 @@ class GraphJobContext : public IContext {
   GraphStore graph;
 };
 
-class Stream1 : public IOperator {
+class Stream1 : public INullaryOperator {
  public:
-  void Execute(IContext& context, OutStream& input,
-               std::vector<InStream>& output) override {
+  void Execute(IContext& context, std::vector<InStream>& output) override {
     auto& casted_context = dynamic_cast<GraphJobContext&>(context);
     auto& graph = casted_context.graph;
     size_t vnum = graph.get_vertices_num(7);
@@ -88,7 +90,7 @@ class Stream1 : public IOperator {
   }
 };
 
-class Stream2 : public IOperator {
+class Stream2 : public IUnaryOperator {
  public:
   void Execute(IContext& context, OutStream& input,
                std::vector<InStream>& output) override {
@@ -121,7 +123,7 @@ class Stream2 : public IOperator {
   }
 };
 
-class Stream3 : public IOperator {
+class Stream3 : public IUnaryOperator {
  public:
   void Execute(IContext& context, OutStream& input,
                std::vector<InStream>& output) override {
@@ -155,7 +157,7 @@ class Stream3 : public IOperator {
   }
 };
 
-class Stream4 : public IOperator {
+class Stream4 : public IUnaryOperator {
  public:
   void Execute(IContext& context, OutStream& input,
                std::vector<InStream>& output) override {
@@ -169,7 +171,7 @@ class Stream4 : public IOperator {
       input >> tag >> message >> reply;
       vertex_t vertex_id;
       if (graph.get_internal_id(reply, vertex_id)) {
-        label_t vertex_label = graph.get_label_id(message);
+        label_t vertex_label = graph.get_label_id(reply);
         assert(vertex_label == 2);
         bool not_has_tag = true;
         for (auto& e : graph.subgraph_2_1_7_out.get_edges(vertex_id)) {
@@ -194,34 +196,55 @@ class Stream4 : public IOperator {
   }
 };
 
-class Stream5 : public IOperator {
+class Stream5 : public IUnaryOperator {
   struct Compare {
-    bool operator()(const std::pair<gid_t, int>& a,
-                    const std::pair<gid_t, int>& b) {
-      return a.second < b.second;
+    bool operator()(const std::pair<int, std::string_view>& a,
+                    const std::pair<int, std::string_view>& b) {
+      if (a.first == b.first) {
+        return a.second < b.second;
+      } else {
+        return a.first > b.first;
+      }
     }
   };
 
  public:
   void Execute(IContext& context, OutStream& input,
                std::vector<InStream>& output) override {
+    auto& casted_context = dynamic_cast<GraphJobContext&>(context);
+    auto& graph = casted_context.graph;
+
     std::unordered_map<gid_t, int> tag_count;
-    gid_t tag, count;
+    gid_t tag;
+    int count;
     while (!input.empty()) {
       input >> tag >> count;
       tag_count[tag] += count;
     }
 
-    std::priority_queue<std::pair<gid_t, int>,
-                        std::vector<std::pair<gid_t, int>>, Compare>
+    std::priority_queue<std::pair<int, std::string_view>,
+                        std::vector<std::pair<int, std::string_view>>, Compare>
         pq;
+    vertex_t tag_id;
     for (auto& pair : tag_count) {
       if (pq.size() < 100) {
-        pq.push(pair);
+        if (graph.get_internal_id(pair.first, tag_id)) {
+          pq.emplace(pair.second, graph.property_name_7.get(tag_id));
+        }
       } else {
-        if (pq.top().second < pair.second) {
-          pq.pop();
-          pq.push(pair);
+        if (pq.top().first < pair.second) {
+          if (graph.get_internal_id(pair.first, tag_id)) {
+            pq.pop();
+            pq.emplace(pair.second, graph.property_name_7.get(tag_id));
+          }
+        } else if (pq.top().first == pair.second) {
+          if (graph.get_internal_id(pair.first, tag_id)) {
+            std::string_view tag_name = graph.property_name_7.get(tag_id);
+            if (tag_name < pq.top().second) {
+              pq.pop();
+              pq.emplace(pair.second, tag_name);
+            }
+          }
         }
       }
     }
@@ -234,36 +257,46 @@ class Stream5 : public IOperator {
   }
 };
 
-class Stream6 : public IOperator {
+class Stream6 : public IUnaryOperator {
   struct Compare {
-    bool operator()(const std::pair<gid_t, int>& a,
-                    const std::pair<gid_t, int>& b) {
-      return a.second < b.second;
+    bool operator()(const std::pair<int, std::string_view>& a,
+                    const std::pair<int, std::string_view>& b) {
+      if (a.first == b.first) {
+        return a.second < b.second;
+      } else {
+        return a.first > b.first;
+      }
     }
   };
 
  public:
   void Execute(IContext& context, OutStream& input,
                std::vector<InStream>& output) override {
-    std::priority_queue<std::pair<gid_t, int>,
-                        std::vector<std::pair<gid_t, int>>, Compare>
+    std::priority_queue<std::pair<int, std::string_view>,
+                        std::vector<std::pair<int, std::string_view>>, Compare>
         pq;
 
-    gid_t tag, count;
+    std::string_view tag;
+    int count;
     while (!input.empty()) {
-      input >> tag >> count;
+      input >> count >> tag;
 
       if (pq.size() < 100) {
-        pq.push(std::make_pair(tag, count));
+        pq.emplace(count, tag);
       } else {
-        if (pq.top().second < count) {
+        if (pq.top().first < count) {
           pq.pop();
-          pq.push(std::make_pair(tag, count));
+          pq.emplace(count, tag);
+        } else if (pq.top().first == count) {
+          if (pq.top().second > tag) {
+            pq.pop();
+            pq.emplace(count, tag);
+          }
         }
       }
     }
 
-    std::vector<std::pair<gid_t, int>> reversed_pq;
+    std::vector<std::pair<int, std::string_view>> reversed_pq;
     while (!pq.empty()) {
       reversed_pq.push_back(pq.top());
       pq.pop();
@@ -271,7 +304,10 @@ class Stream6 : public IOperator {
 
     auto& self_output = output[context.global_worker_id()];
     for (auto it = reversed_pq.rbegin(); it != reversed_pq.rend(); ++it) {
-      self_output << it->first << it->second;
+      std::string ret =
+          std::to_string(it->first) + "|" + std::string(it->second);
+      self_output << ret;
+      // self_output << it->first << it->second;
     }
   }
 };
@@ -280,12 +316,19 @@ class Stream6 : public IOperator {
 
 extern "C" void* create_dataflow() {
   auto dataflow = new ladder::DataFlow();
-  dataflow->add_operator(std::make_unique<ladder::Stream1>());
-  dataflow->add_operator(std::make_unique<ladder::Stream2>());
-  dataflow->add_operator(std::make_unique<ladder::Stream3>());
-  dataflow->add_operator(std::make_unique<ladder::Stream4>());
-  dataflow->add_operator(std::make_unique<ladder::Stream5>());
-  dataflow->add_operator(std::make_unique<ladder::Stream6>());
+  int op_1 =
+      dataflow->add_nullary_operator(std::make_unique<ladder::Stream1>());
+  int op_2 =
+      dataflow->add_unary_operator(std::make_unique<ladder::Stream2>(), op_1);
+  int op_3 =
+      dataflow->add_unary_operator(std::make_unique<ladder::Stream3>(), op_2);
+  int op_4 =
+      dataflow->add_unary_operator(std::make_unique<ladder::Stream4>(), op_3);
+  int op_5 =
+      dataflow->add_unary_operator(std::make_unique<ladder::Stream5>(), op_4);
+  int op_6 =
+      dataflow->add_unary_operator(std::make_unique<ladder::Stream6>(), op_5);
+  dataflow->sink(op_6);
   return dataflow;
 }
 

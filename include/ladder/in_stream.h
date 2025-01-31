@@ -23,8 +23,73 @@ class InStream {
   std::vector<char> buffer_;
 };
 
-InStream& operator<<(InStream& in, int data) {
+template <typename T>
+InStream& operator<<(InStream& in, const T& data) {
+  std::cerr << "Unsupported type" << std::endl;
+  return in;
+}
+
+template <>
+InStream& operator<<(InStream& in, const int8_t& data) {
   in.write(reinterpret_cast<const char*>(&data), sizeof(data));
+  return in;
+}
+
+template <>
+InStream& operator<<(InStream& in, const int32_t& data) {
+  in.write(reinterpret_cast<const char*>(&data), sizeof(data));
+  return in;
+}
+
+template <>
+InStream& operator<<(InStream& in, const int64_t& data) {
+  in.write(reinterpret_cast<const char*>(&data), sizeof(data));
+  return in;
+}
+
+template <>
+InStream& operator<<(InStream& in, const uint8_t& data) {
+  in.write(reinterpret_cast<const char*>(&data), sizeof(data));
+  return in;
+}
+
+template <>
+InStream& operator<<(InStream& in, const uint32_t& data) {
+  in.write(reinterpret_cast<const char*>(&data), sizeof(data));
+  return in;
+}
+
+template <>
+InStream& operator<<(InStream& in, const uint64_t& data) {
+  in.write(reinterpret_cast<const char*>(&data), sizeof(data));
+  return in;
+}
+
+template <>
+InStream& operator<<(InStream& in, const Date& data) {
+  in.write(reinterpret_cast<const char*>(&data), sizeof(data));
+  return in;
+}
+
+template <>
+InStream& operator<<(InStream& in, const DateTime& data) {
+  in.write(reinterpret_cast<const char*>(&data), sizeof(data));
+  return in;
+}
+
+template <>
+InStream& operator<<(InStream& in, const std::string_view& data) {
+  size_t length = data.size();
+  in << length;
+  in.write(reinterpret_cast<const char*>(data.data()), length);
+  return in;
+}
+
+template <>
+InStream& operator<<(InStream& in, const std::string& data) {
+  size_t length = data.size();
+  in << length;
+  in.write(reinterpret_cast<const char*>(data.data()), length);
   return in;
 }
 

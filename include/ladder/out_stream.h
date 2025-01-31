@@ -3,6 +3,8 @@
 
 #include <string.h>
 
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace ladder {
@@ -10,21 +12,39 @@ namespace ladder {
 class OutStream {
  public:
   OutStream(const std::vector<std::vector<char>>& buffers)
-      : buffers_(buffers), idx_(0), offset_(0) {}
+      : buffers_(buffers), idx_(0), offset_(0) {
+    while (idx_ < buffers_.size() && buffers_[idx_].empty()) {
+      idx_ += 1;
+    }
+  }
   ~OutStream() = default;
 
-  bool empty() const { return buffers_.empty(); }
+  bool empty() const { return (idx_ == buffers_.size()); }
 
   size_t Read(char* data, size_t size) {
+    CHECK_LT(idx_, buffers_.size());
     size_t remaining = buffers_[idx_].size() - offset_;
     size_t read_size = std::min(remaining, size);
+    CHECK_LE(offset_ + read_size, buffers_[idx_].size());
     memcpy(data, buffers_[idx_].data() + offset_, read_size);
+    offset_ += read_size;
+    while (idx_ < buffers_.size() && offset_ == buffers_[idx_].size()) {
+      idx_++;
+      offset_ = 0;
+    }
+    return read_size;
+  }
+
+  std::string_view TakeSlice(size_t size) {
+    size_t remaining = buffers_[idx_].size() - offset_;
+    size_t read_size = std::min(remaining, size);
+    std::string_view ret(buffers_[idx_].data() + offset_, read_size);
     offset_ += read_size;
     if (offset_ == buffers_[idx_].size()) {
       idx_++;
       offset_ = 0;
     }
-    return read_size;
+    return ret;
   }
 
  private:
@@ -84,6 +104,23 @@ OutStream& operator>>(OutStream& out, Date& data) {
 template <>
 OutStream& operator>>(OutStream& out, DateTime& data) {
   out.Read(reinterpret_cast<char*>(&data), sizeof(data));
+  return out;
+}
+
+template <>
+OutStream& operator>>(OutStream& out, std::string_view& data) {
+  size_t length;
+  out >> length;
+  data = out.TakeSlice(length);
+  return out;
+}
+
+template <>
+OutStream& operator>>(OutStream& out, std::string& data) {
+  size_t length;
+  out >> length;
+  std::string_view view = out.TakeSlice(length);
+  data = std::string(view);
   return out;
 }
 

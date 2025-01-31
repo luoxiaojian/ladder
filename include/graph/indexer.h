@@ -43,12 +43,12 @@ class Indexer {
     indices_.clear();
     indices_.resize(table_size, std::numeric_limits<vertex_t>::max());
 
-    for (auto key : keys_) {
-      size_t hash = hash_vertex(key) % table_size;
+    for (vertex_t i = 0; i < keys_.size(); ++i) {
+      size_t hash = hash_vertex(keys_[i]) % table_size;
       while (indices_[hash] != std::numeric_limits<vertex_t>::max()) {
         hash = (hash + 1) % table_size;
       }
-      indices_[hash] = key;
+      indices_[hash] = i;
     }
   }
 
@@ -63,14 +63,18 @@ class Indexer {
   bool get_index(gid_t key, vertex_t& index) const {
     size_t table_size = indices_.size();
     size_t hash = hash_vertex(key) % table_size;
-    while (indices_[hash] != key) {
-      if (indices_[hash] == std::numeric_limits<vertex_t>::max()) {
+    while (true) {
+      auto idx = indices_[hash];
+      if (idx == std::numeric_limits<vertex_t>::max()) {
         return false;
+      }
+      if (keys_[idx] == key) {
+        index = idx;
+        return true;
       }
       hash = (hash + 1) % table_size;
     }
-    index = hash;
-    return true;
+    return false;
   }
 
   size_t size() const { return keys_.size(); }

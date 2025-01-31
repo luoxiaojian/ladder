@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "glog/logging.h"
 #include "graph/csr.h"
 #include "graph/graph_view.h"
 #include "graph/i_csr.h"
@@ -38,8 +39,10 @@ class GraphDB {
   void open(const std::string& prefix, int partition_id, int partition_num) {
     partition_id_ = partition_id;
     partition_num_ = partition_num;
+    LOG(INFO) << "before open schema...";
 
     schema_.open(prefix + "/graph_schema/schema.json");
+    LOG(INFO) << "after open schema...";
     vertex_label_num_ = schema_.vertex_label_num();
     edge_label_num_ = schema_.edge_label_num();
 
@@ -47,12 +50,15 @@ class GraphDB {
         prefix + "/graph_data_bin/partition_" + std::to_string(partition_id_);
 
     vertex_map_.open(partition_binary_prefix + "/vm", vertex_label_num_);
+    LOG(INFO) << "after open vertex map...";
     vertex_props_.resize(vertex_label_num_);
     for (label_t i = 0; i < vertex_label_num_; ++i) {
+      LOG(INFO) << "vertex prop - " << (int) i;
       vertex_props_[i].open(
           partition_binary_prefix + "/vp_" + std::to_string(i),
           schema_.get_vertex_header(i));
     }
+    LOG(INFO) << "after open vertex props...";
 
     size_t csr_list_size = static_cast<size_t>(vertex_label_num_) *
                            static_cast<size_t>(edge_label_num_) *
@@ -65,6 +71,8 @@ class GraphDB {
         for (label_t dst_label = 0; dst_label < vertex_label_num_;
              ++dst_label) {
           if (schema_.exist_edge_triplet(src_label, edge_label, dst_label)) {
+            LOG(INFO) << "edge: src -" << (int) src_label << ", edge - "
+                      << (int) edge_label << ", dst - " << (int) dst_label;
             size_t idx = edge_label_to_index(src_label, edge_label, dst_label);
             if (schema_.oe_is_single(src_label, edge_label, dst_label)) {
               oe_[idx] = new SCsr();
@@ -102,6 +110,7 @@ class GraphDB {
         }
       }
     }
+    LOG(INFO) << "after open csrs...";
   }
 
   GraphView get_graph_view(label_t src_label, label_t edge_label,

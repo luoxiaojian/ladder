@@ -57,6 +57,9 @@ class StringColumn : public IColumn {
   inline size_t size() override { return offsets_.size(); }
 
   inline std::string_view get(size_t idx) const {
+    CHECK_LT(idx, offsets_.size());
+    CHECK_LT(offsets_[idx], content_.size());
+    CHECK_LT(idx, lengths_.size());
     return std::string_view(&content_[offsets_[idx]], lengths_[idx]);
   }
 
